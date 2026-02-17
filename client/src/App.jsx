@@ -349,7 +349,7 @@ export default function App() {
                     {p.category.replace(/-/g, " ")}
                   </div>
                   <div className="card-name">{p.name}</div>
-                  {p.price && <div className="card-price">${p.price}</div>}
+                  {p.price && <div className="card-price">₹{p.price}</div>}
                   <div className="score-bar">
                     <div
                       className="score-fill"
