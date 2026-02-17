@@ -2,7 +2,7 @@
 
 Web app that finds similar products from an uploaded image, image URL, or text search — built with React, Node.js, and the Imagga Vision API.
 
-Live demo: [your-app.vercel.app](https://your-app.vercel.app)
+Live demo: (https://visual-product-matcher-umber.vercel.app/)
 
 ---
 
