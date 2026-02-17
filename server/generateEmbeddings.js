@@ -53,4 +53,5 @@ fs.writeFileSync(
   JSON.stringify(products, null, 2)
 );
 
-console.log("\nAll 50 products updated successfully!");
+console.log(`
+Done — ${products.length} products updated.`);

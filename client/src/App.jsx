@@ -156,9 +156,7 @@ export default function App() {
       <header className="header">
         <div className="header-eyebrow">AI-Powered Discovery</div>
         <h1 className="header-title">
-          Visual<br />
-          <span className="header-accent">Product</span><br />
-          Matcher
+          Visual <span className="header-accent">Product</span> Matcher
         </h1>
         <p className="header-sub">
           Upload any product image — our AI identifies what it is and finds similar items instantly.

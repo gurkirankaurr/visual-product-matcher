@@ -130,56 +130,91 @@ function matchProducts(tags, limit = 12) {
   const tagNames = tags.map(t => t.tag);
   const tagMap   = Object.fromEntries(tags.map(t => [t.tag, t.confidence]));
 
+  // Use only the SINGLE highest-confidence tag per category to avoid score stacking
   const categoryScores = {};
   tagNames.forEach(tag => {
     (TAG_CATEGORY_MAP[tag] || []).forEach(cat => {
-      categoryScores[cat] = (categoryScores[cat] || 0) + (tagMap[tag] / 100);
+      const conf = tagMap[tag] / 100;
+      if (!categoryScores[cat] || conf > categoryScores[cat]) {
+        categoryScores[cat] = conf; // take max, not sum
+      }
     });
   });
 
   console.log("📊 Category scores:", categoryScores);
   console.log("🏷️  Top tags:", tagNames.slice(0, 10));
 
-  return products
-    .map(product => {
-      const name = product.name.toLowerCase();
-      const cat  = product.category.toLowerCase();
-      let score  = 0;
-      if (categoryScores[cat]) score += categoryScores[cat] * 0.5;
-      tagNames.forEach(tag => {
-        const conf = tagMap[tag] / 100;
-        if (name.includes(tag))               score += conf * 0.35;
-        else if (`${name} ${cat}`.includes(tag)) score += conf * 0.2;
-        if (COLOR_WORDS.includes(tag) && `${name} ${cat}`.includes(tag)) score += conf * 0.25;
-      });
-      return { id: product.id, name: product.name, category: product.category,
-               image: product.image, price: product.price, brand: product.brand,
-               similarity: Number(Math.min(score, 0.99).toFixed(4)) };
-    })
-    .filter(r => r.similarity > 0.05)
+  // Score each product then normalise against the top scorer
+  const scored = products.map(product => {
+    const name = product.name.toLowerCase();
+    const cat  = product.category.toLowerCase();
+    let score  = 0;
+
+    // Category match contributes up to 0.45 (capped, not stacked)
+    if (categoryScores[cat]) score += categoryScores[cat] * 0.45;
+
+    // Name/colour matches: take the best single match per type, not cumulative
+    let nameBonus  = 0;
+    let colorBonus = 0;
+    tagNames.forEach(tag => {
+      const conf = tagMap[tag] / 100;
+      if (name.includes(tag))
+        nameBonus = Math.max(nameBonus, conf * 0.30);
+      else if (`${name} ${cat}`.includes(tag))
+        nameBonus = Math.max(nameBonus, conf * 0.18);
+      if (COLOR_WORDS.includes(tag) && `${name} ${cat}`.includes(tag))
+        colorBonus = Math.max(colorBonus, conf * 0.18);
+    });
+    score += nameBonus + colorBonus;
+
+    return { id: product.id, name: product.name, category: product.category,
+             image: product.image, price: product.price, brand: product.brand,
+             rawScore: score };
+  }).filter(r => r.rawScore > 0.04);
+
+  if (scored.length === 0) return [];
+
+  // Normalise so the best match gets ~0.95 and others scale down proportionally
+  const maxScore = Math.max(...scored.map(r => r.rawScore));
+  return scored
+    .map(r => ({
+      ...r,
+      similarity: Number(((r.rawScore / maxScore) * 0.92).toFixed(4)),
+      rawScore: undefined,
+    }))
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, limit);
 }
 
 /* ── Text search ─────────────────────────────────────────────────────────── */
 function textSearch(query, limit = 12) {
-  const words = query.toLowerCase().split(/\s+/);
-  return products
-    .map(product => {
-      const name = product.name.toLowerCase();
-      const cat  = product.category.toLowerCase();
-      let score  = 0;
-      words.forEach(w => {
-        if (w.length < 2) return;
-        if (name.includes(w))               score += 0.35;
-        else if (`${name} ${cat}`.includes(w)) score += 0.2;
-        if (COLOR_WORDS.includes(w) && `${name} ${cat}`.includes(w)) score += 0.3;
-      });
-      return { id: product.id, name: product.name, category: product.category,
-               image: product.image, price: product.price, brand: product.brand,
-               similarity: Number(Math.min(score, 0.99).toFixed(4)) };
-    })
-    .filter(r => r.similarity > 0.1)
+  const words = query.toLowerCase().split(/\s+/).filter(w => w.length >= 2);
+  const scored = products.map(product => {
+    const name = product.name.toLowerCase();
+    const cat  = product.category.toLowerCase();
+    let nameBonus  = 0;
+    let colorBonus = 0;
+    words.forEach(w => {
+      if (name.includes(w))
+        nameBonus = Math.max(nameBonus, 0.55);
+      else if (`${name} ${cat}`.includes(w))
+        nameBonus = Math.max(nameBonus, 0.30);
+      if (COLOR_WORDS.includes(w) && `${name} ${cat}`.includes(w))
+        colorBonus = Math.max(colorBonus, 0.20);
+    });
+    return { id: product.id, name: product.name, category: product.category,
+             image: product.image, price: product.price, brand: product.brand,
+             rawScore: nameBonus + colorBonus };
+  }).filter(r => r.rawScore > 0.1);
+
+  if (scored.length === 0) return [];
+  const maxScore = Math.max(...scored.map(r => r.rawScore));
+  return scored
+    .map(r => ({
+      ...r,
+      similarity: Number(((r.rawScore / maxScore) * 0.90).toFixed(4)),
+      rawScore: undefined,
+    }))
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, limit);
 }
